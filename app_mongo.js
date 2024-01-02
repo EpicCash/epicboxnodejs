@@ -30,6 +30,15 @@ const { WebSocket, WebSocketServer } = require('ws')
 // Mogodb driver for externally store messageid and slates for ver 2.0.0. of epicbox, tp work with answer by wallet with slate id message
 const { MongoClient } = require('mongodb');
 
+// Ledger Integration API support
+const mime = require('mime-types')
+const url = require('url')
+const path = require('path')
+const qs = require('querystring')
+
+// where is subfolder with your public files like index.html
+const baseDirectory = __dirname +"/public"
+
 // Connection URL for mongo, please change if your mongo server is on other location, you can add authorization and open firewall for it.
 // each instance of epicbox which you run on your domain must use the same mongodb -- so change to correct ip and remeber open ports in firewall
 // it's good idea to add one field (createdat:new Date()) in stored document and set index with timeout which which can delete documents which are old about 3-4 days
@@ -56,11 +65,7 @@ var interval = null
 
 // time of interval ( ms ) in which epicbox can try repeat send the oldest slate for address.
 //
-var intervalperiod = 4000 // 4 seconds 
-
-
-//Where is executable rust named epicboxlib compiled from epicboxlib subfolder
-var pathtoepicboxlib = "./epicboxlib"
+var intervalperiod = 4000 // 4 seconds
 
 // amount of repeats FastSend message to wallet
 var fast_send_repeats = 20
@@ -176,69 +181,335 @@ setInterval(()=>{
 
 },60*60*1000);
 
-
-
-
 const requestListener = function (req, res) {
-      res.writeHead(200)
-      res.end(`<!DOCTYPE html>\n\
-<html>\n\
-<head>\n\
-<title>Epicbox</title>\n\
-<style>a:link {\n\
-  color: orange;\n\
-} a:visited {\n\
-  color: orange;\n\
-}</style>\n\
-</head>\n\
-<body style='background-color: #242222; color: lightgray; margin-left: 20px;''>\n\
-\n\
-<h1>Epicbox servers. Local server number 1</h1>\n\
-<p>Protocol 2.0.0</p>\n\
-<a href='https://github.com/fastepic/epic-wallet/tree/epicbox-0.0.1'>epic-wallet to build with protocol 2.0.0</a>\n\
-<p>Asia, Australia - epicbox.hyperbig.com</p>\n\
-<p>North America, South America - epicbox.epic.tech</p>\n\
-<p>US East Cost - epicbox.epicnet.us</p>\n\
-<p>Africa, Europe - epicbox.fastepic.eu</p>\n\
-<br>\n\
-<p>More about Epic</p>\n\
-<a href='https://epic.tech'>Epic Cash main webpage</a>\n\
-<br>\n\
-<br>\n\
-    Example use in toml file.\n\
-\n\
-<pre>\n\
-<code>\n\
-\n\
-[epicbox]\n\
-epicbox_domain = 'epicbox.fastepic.eu'\n\
-epicbox_port = 443\n\
-epicbox_protocol_unsecure = false\n\
-epicbox_address_index = 0\n\
-epicbox_listener_interval = 10\n\
-\n\
-</code>\n\
-</pre>\n\
-<p> start listen: epic-wallet listen -m epicbox</p>\n\
-<br>\n\
-<h1>\n\
-Epicbox Statistics from ${statistics.from.toUTCString()}:\n\
-</h1>\n\
-<h3>\n\
-connections: ${statistics.connectionsInHour}<br>\n\
-active connections: ${statistics.activeconnections}<br>\n\
-subscribes: ${statistics.connectionsInHour}<br>\n\
-received slates: ${statistics.slatesReceivedInHour}<br>\n\
-relayed slates: ${statistics.slatesRelayedInHour}<br>\n\
-sending slate attempts: ${statistics.slatesAttempt}<br>\n\
-</h3>\n\
-</body>\n\
-</html>`);
+
+   if(req.method=="GET") {
+
+	try {
+
+              console.log(req.url)
+
+                  var requestUrl = url.parse(req.url,true)
+
+                // need to use path.normalize so people can't access directories underneath baseDirectory
+                var fsPath = baseDirectory+path.normalize(requestUrl.pathname)
+
+                console.log(fsPath)
+                console.log(requestUrl)
+
+            switch (requestUrl.pathname) {
+
+                case "/": {
+                        res.writeHead(200, { 'Content-Type':'text/html'});
+                        res.end(`<!DOCTYPE html><html>\n\
+				<head><title>Epicbox</title><style>a:link {color: orange;} a:visited {color: orange;}</style></head>\n\
+				<body style='background-color: #242222; color: lightgray; margin-left: 20px;''>\n\
+				<h1>Epicbox servers. Local server number 1</h1><p>Protocol 2.0.0</p>\n\
+				<a href='https://github.com/fastepic/epic-wallet/tree/epicbox-0.0.1'>epic-wallet to build with protocol 2.0.0</a>\n\
+				<p>Asia, Australia - epicbox.hyperbig.com</p><p>North America, South America - epicbox.epic.tech</p>\n\
+				<p>US East Cost - epicbox.epicnet.us</p><p>Africa, Europe - epicbox.fastepic.eu</p><br>\n\
+				<p>More about Epic</p><a href='https://epic.tech'>Epic Cash main webpage</a><br><br>\n\
+				Example use in toml file:\n\
+				<pre><code>\n\[epicbox]\n\epicbox_domain = 'epicbox.fastepic.eu'\n\epicbox_port = 443\n\epicbox_protocol_unsecure = false\n\epicbox_address_index = 0\n\epicbox_listener_interval = 10\n\
+				</code></pre>\n\
+				<p> start listen: epic-wallet listen -m epicbox</p><br>\n\
+				<h1>Epicbox Statistics from ${statistics.from.toUTCString()}:</h1>\n\
+				<h3>connections: ${statistics.connectionsInHour}<br>active connections: ${statistics.activeconnections}<br>\n\
+				subscribes: ${statistics.connectionsInHour}<br>received slates: ${statistics.slatesReceivedInHour}<br>\n\
+				relayed slates: ${statistics.slatesRelayedInHour}<br>sending slate attempts: ${statistics.slatesAttempt}<br>\n\
+				</h3>\n\
+				</body></html>`);
+			break;
+		} // case '/'
+
+                case "/timenow": {
+
+			res.setHeader("Content-Type", "application/json")
+			res.writeHead(200)
+			var timestamp =Date.now();
+			res.end(JSON.stringify({time: timestamp}))
+
+	                break;
+
+		} // case 'timenow
+
+                  case "/listener": {
+                        listener(requestUrl, res)
+                  	break;
+		} // case '/listener'
+
+                  case "/sender": {
+			res.writeHead(400)
+			res.end("HTTP method GET is not supported by this URL")
+			console.log("Error: GET is not permitted on \"sender\" URL, use POST instead")
+                  	break;
+		} // case '/sender'
+
+                default: {
+                var fileStream = fs.createReadStream(fsPath)
+                  res.setHeader("Content-Type",mime.contentType(path.extname(fsPath)))
+                                                fileStream.pipe(res)
+                                                fileStream.on('open', function() {
+                                                     res.writeHead(200)
+                                                })
+                                                fileStream.on('error',function(e) {
+                                                     res.end('File does not exist')
+                                                })
+		} // default
+            }
+
+           } catch(e) {
+                res.writeHead(500)
+                res.end()     // end the response so browsers don't hang
+                console.log(e.stack)
+           }
+
+   } else if (req.method=="POST") {
+
+	try {
+              console.log(req.url)
+
+		var requestUrl = url.parse(req.url,true)
+
+		// need to use path.normalize so people can't access directories underneath baseDirectory
+		var fsPath = baseDirectory+path.normalize(requestUrl.pathname)
+
+		console.log(fsPath)
+		console.log(requestUrl)
+
+		switch (requestUrl.pathname) {
+
+			case "/sender": {
+				var requestBody = '';
+				req.on('data', function(data) {
+					requestBody += data;
+					if(requestBody.length > 1e7) {
+						res.writeHead(413, 'Request Entity Too Large', {'Content-Type': 'text/html'});
+						res.end('<!doctype html><html><head><title>413</title></head><body>413: Request Entity Too Large</body></html>');
+					}
+				});
+				req.on('end', function() {
+					var formData = qs.parse(requestBody);
+					var obj = JSON.parse(JSON.stringify(formData));
+					console.log("requestBody = " + requestBody);
+					console.log("formData =" + obj);
+					sender(requestUrl, obj, res)
+				});
+                  		break;
+			} // case '/sender'
+
+	                default: {
+				var fileStream = fs.createReadStream(fsPath)
+				res.setHeader("Content-Type",mime.contentType(path.extname(fsPath)))
+				fileStream.pipe(res)
+				fileStream.on('open', function() {
+					res.writeHead(200)
+				})
+				fileStream.on('error',function(e) {
+					res.end('File does not exist')
+				})
+			} // default
+		} // switch
+
+	} catch(e) {
+		res.writeHead(500)
+		res.end()     // end the response so browsers don't hang
+		console.log(e.stack)
+	}
+   }
 }
 
+function listener(requestUrl, res){
 
+	try {
+	      // trick
+		let json = JSON.parse(JSON.stringify(requestUrl.query))
 
+		console.log(json)
 
+		if(json.hasOwnProperty("address") && json.hasOwnProperty("signature") && json.hasOwnProperty("timenow")  ){
+
+			console.log("OK")
+
+			var from;
+			let split = json.address.search('@');
+			if (split >= 0) {
+				from = json.address.split('@')
+				from  = from[0]
+			} else {
+				from = json.address;
+			}
+			console.log("from = " + from);
+
+			// here we check address!!!
+
+			// use externally rust program to verify addresses - it is the same which is used to verify signatures
+			const childadd = execFile(pathtoepicboxlib, ['verifyaddress',  json.address, from], (erroradr, stdoutadr, stderradr) =>
+			{
+				if (erroradr) {
+					throw erroradr
+				}
+
+				var isTrueSetadr = (stdoutadr === 'true');
+
+				if(isTrueSetadr) {
+					// use rust program to verify signatures if they signet timenow by private key of address public key
+					const child = execFile(pathtoepicboxlib, ["verifysignature", from , json.timenow, json.signature], (error, stdout, stderr) => {
+
+					       if (error) {
+					          throw error;
+					       }
+					       var isTrueSet = (stdout === 'true');
+
+						if(isTrueSet){
+							const db = mongoclient.db(dbName);
+							const collection = db.collection(collectionname);
+
+							// show all slates where address is from query - sender and receiver
+							collection.find({queue:from, replyto:json.address}).project({
+							  _id:0, queue:1, replyto:1, made:1, payload:1, createdat:1, expiration:1 }
+							  ).toArray().then((SlatesMany =>
+							{
+								res.setHeader("Content-Type", "application/json")
+								res.writeHead(200)
+								res.end(JSON.stringify({slates:SlatesMany}))
+							}))
+						} else {
+							res.writeHead(200)
+							res.end(JSON.stringify({error:true, message:"wrong signature"}))
+					       }
+					}) // end child
+				} else {
+					res.writeHead(200)
+					res.end(JSON.stringify({error:true, message:"wrong address"}))
+				}
+			}) // end childad
+		} else {
+			res.writeHead(200)
+			res.end(JSON.stringify({error:true, message:"not enough data"}))
+		}
+	} catch (e) {
+	        res.writeHead(500)
+	        res.end()     // end the response so browsers don't hang
+	        console.log(e.stack)
+	}
+}
+
+function sender(requestUrl, requestBody, res) {
+
+	try {
+	      // trick
+		let jsonUrl = JSON.parse(JSON.stringify(requestUrl.query))
+
+		console.log(jsonUrl)
+
+		if(jsonUrl.hasOwnProperty("address")) {
+
+			console.log("OK")
+
+			var destination;
+			let split = jsonUrl.address.search('@');
+			if (split >= 0) {
+				destination = jsonUrl.address.split('@')
+				destination  = destination[0]
+			} else {
+				destination = jsonUrl.address;
+			}
+			console.log("destination = " + destination);
+
+			// here we check address!!!
+
+			// use externally rust program to verify addresses - it is the same which is used to verify signatures
+			const childadd = execFile(pathtoepicboxlib, ['verifyaddress',  jsonUrl.address, destination], (erroradr, stdoutadr, stderradr) =>
+			{
+				if (erroradr) {
+					throw erroradr
+				}
+
+				var destinationValid = (stdoutadr === 'true');
+
+				if(destinationValid) {
+					console.log("Destination address is valid, moving on...");
+					// nothing else in URL, move onto checking request body
+				}
+			}) // end child
+		}
+
+		console.log(requestBody);
+		if (requestBody.hasOwnProperty("mapmessage") && requestBody.hasOwnProperty("from") && requestBody.hasOwnProperty("signature")) {
+
+			console.log("OK")
+
+			var fromAddress;
+			let split = requestBody.from.search('@');
+			if (split >= 0) {
+				fromAddress = requestBody.from.split('@')
+				fromAddress = fromAddress[0]
+			} else {
+				fromAddress = requestBody.from;
+			}
+			console.log("fromAddress = " + fromAddress);
+
+			// here we check address!!!
+
+			// use externally rust program to verify addresses - it is the same which is used to verify signatures
+			const childadd = execFile(pathtoepicboxlib, ['verifyaddress',  requestBody.from, fromAddress], (erroradr, stdoutadr, stderradr) =>
+			{
+				if (erroradr) {
+					throw erroradr
+				}
+
+				var senderAddressValid = (stdoutadr === 'true');
+
+				if(senderAddressValid) {
+
+					// use rust program to verify signatures if they signet timenow by private key of address public key
+					const child = execFile(pathtoepicboxlib, ["verifysignature", fromAddress, requestBody.mapmessage, requestBody.signature], (error, stdout, stderr) => {
+
+					       if (error) {
+					          throw error;
+					       }
+					       var signatureValid = (stdout === 'true');
+
+						if(signatureValid){
+							// TODO: add encrypted data to DB
+							const db = mongoclient.db(dbName);
+							console.log("Signature OK - Valid");
+
+							res.writeHead(200)
+							res.end("lastSeen: 1311110615")
+
+							//const collection = db.collection(collectionname);
+
+							// show all slates where address is from query - sender and receiver
+							//collection.find({queue:from, replyto:json.address}).project({
+							//  _id:0, queue:1, replyto:1, made:1, payload:1, createdat:1, expiration:1 }
+							//  ).toArray().then((SlatesMany =>
+							//{
+							//	res.setHeader("Content-Type", "application/json")
+							//	res.writeHead(200)
+							//	res.end(JSON.stringify({slates:SlatesMany}))
+							//}))
+						} else {
+							res.writeHead(200)
+							res.end(JSON.stringify({error:true, message:"wrong signature"}))
+					       }
+					}) // end child
+				} else {
+					res.writeHead(200)
+					res.end(JSON.stringify({error:true, message:"wrong address"}))
+				}
+			}) // end childad
+		} else {
+			res.writeHead(200)
+			res.end(JSON.stringify({error:true, message:"not enough data"}))
+		}
+	} catch (e) {
+	        res.writeHead(500)
+	        res.end()     // end the response so browsers don't hang
+	        console.log(e.stack)
+	}
+}
 
 //
 // HTTMl server creation with function for receives requests
@@ -955,12 +1226,12 @@ async function main() {
   console.log('Connected successfully to mongo');
 
   //run().catch(console.log);
-    
+
   server.listen(localepicboxserviceport)
-   
+
   interval = setInterval( forInterval, 2000);
-  
-  setInterval(forIntervalChallenge, 3*60*1000); 
+
+  setInterval(forIntervalChallenge, 3*60*1000);
 
   return "Epicbox ready to work.";
 
