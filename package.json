@@ -11,6 +11,6 @@
   "dependencies": {
     "uid2": "^1.0.0",
     "ws": "^8.12.1",
-    "mongodb": "^5.1.0",
+    "mongodb": "^5.1.0"
   }
 }
