@@ -16,3 +16,6 @@ And for the next one:
 node app_mongo_many.js config_many_slave1.json
 
 Enjoy.
+
+For Installation Files, go to https://github.com/EpicCash/epicbox-nodejs-install
+
